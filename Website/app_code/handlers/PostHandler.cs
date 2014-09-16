@@ -9,6 +9,8 @@ public class PostHandler : IHttpHandler
 {
     public void ProcessRequest(HttpContext context)
     {
+        Blog.ValidateToken(context);
+
         if (!context.User.Identity.IsAuthenticated)
             throw new HttpException(403, "No access");
 
@@ -21,7 +23,7 @@ public class PostHandler : IHttpHandler
         }
         else if (mode == "save")
         {
-            EditPost(id, context.Request.Form["title"], context.Request.Form["content"], bool.Parse(context.Request.Form["isPublished"]), context.Request.Form["categories"].Split(','));
+            EditPost(id, context.Request.Form["title"], context.Request.Form["excerpt"], context.Request.Form["content"], bool.Parse(context.Request.Form["isPublished"]), context.Request.Form["categories"].Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries));
         }
     }
 
@@ -35,19 +37,20 @@ public class PostHandler : IHttpHandler
         Storage.Delete(post);
     }
 
-    private void EditPost(string id, string title, string content, bool isPublished, string[] categories)
+    private void EditPost(string id, string title, string excerpt, string content, bool isPublished, string[] categories)
     {
         Post post = Storage.GetAllPosts().FirstOrDefault(p => p.ID == id);
 
         if (post != null)
         {
             post.Title = title;
+            post.Excerpt = excerpt;
             post.Content = content;
             post.Categories = categories;
         }
         else
         {
-            post = new Post() { Title = title, Content = content, Slug = CreateSlug(title), Categories = categories };
+            post = new Post() { Title = title, Excerpt = excerpt, Content = content, Slug = CreateSlug(title), Categories = categories };
             HttpContext.Current.Response.Write(post.Url);
         }
 
@@ -85,9 +88,8 @@ public class PostHandler : IHttpHandler
     {
         title = title.ToLowerInvariant().Replace(" ", "-");
         title = RemoveDiacritics(title);
-        title = Regex.Replace(title, @"([^0-9a-z-])", string.Empty);
 
-        if (Storage.GetAllPosts().Any(p => string.Equals(p.Slug, title)))
+        if (Storage.GetAllPosts().Any(p => string.Equals(p.Slug, title, StringComparison.OrdinalIgnoreCase)))
             throw new HttpException(409, "Already in use");
 
         return title.ToLowerInvariant();
